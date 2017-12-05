@@ -1,112 +1,112 @@
 html {
-    height: 100%;
+  height: 100%;
 }
 
 ul,
 li,
 body,
 html {
-    padding: 0;
-    margin: 0;
+  padding: 0;
+  margin: 0;
 }
 
 body {
-    margin: 0px auto;
-    overflow-y: auto;
-    height: 100%;
+  margin: 0px auto;
+  overflow-y: auto;
+  height: 100%;
 }
 
 h3 {
-    border-bottom: 1px solid;
+  border-bottom: 1px solid;
 }
 
 p {
-    margin: 8px;
+  margin: 8px;
 }
 
 .container {
-    padding: 10px;
+  padding: 10px;
 }
 
 #deviceList {
-    margin-bottom: 10px;
+  margin-bottom: 10px;
 }
 
 
 /*screen*/
 
 #device-info {
-    margin-left: 216px;
+  margin-left: 216px;
 }
 
 .left-panel {
-    position: absolute;
+  position: absolute;
 }
 
 #device-selector {
-    width: 200px;
-    height: 283px;
+  width: 200px;
+  height: 283px;
 }
 
 #deviceList li {
-    list-style: none;
-    border-bottom: 1px solid #eee;
+  list-style: none;
+  border-bottom: 1px solid #eee;
 }
 
 #deviceList li:nth-child(even) {
-    background: #ddd;
+  background: #ddd;
 }
 
 .mat_btn {
-    position: relative;
-    top: -5px;
-    background: #5bc0de;
+  position: relative;
+  top: -5px;
+  background: #5bc0de;
 }
 
 .r32 {
-    width: 32%;
-    padding: 14px 12px;
+  width: 32%;
+  padding: 14px 12px;
 }
 
 .bg {
-    background: #aaa;
-    line-height: 32px;
+  background: #aaa;
+  line-height: 32px;
 }
 
 .row {
-    margin: 0;
+  margin: 0;
 }
 
 #deviceList .col-xs-2,
 #deviceList .col-xs-3,
 #deviceList .col-xs-5 {
-    padding: 10px;
-    overflow-wrap: break-word;
+  padding: 10px;
+  overflow-wrap: break-word;
 }
 
 #deviceList .col-xs-5 {
-    border-left: 1px solid #eee;
-    border-right: 1px solid #eee;
+  border-left: 1px solid #eee;
+  border-right: 1px solid #eee;
 }
 
 #deviceList li.bg .col-xs-5 {
-    border: none;
+  border: none;
 }
 
 #deviceList .col-xs-2.btn {
-    margin-top: 3px;
-    padding: 6px;
+  margin-top: 3px;
+  padding: 6px;
 }
 
 .alert {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 #mat_error {
-    position: absolute;
-    top: 0;
-    width: 100%;
-    height: 660px;
-    background: url("assets/error.png") no-repeat;
-    background-size: cover;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 660px;
+  background: url("assets/error.png") no-repeat;
+  background-size: cover;
 }

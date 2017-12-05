@@ -1,29 +1,28 @@
 var host = "127.0.0.1";
 var port = 5037;
+
 function create() {
     var defer = $.Deferred();
     chrome.socket.create("tcp", {}, function (createInfo) {
         if (createInfo.socketId >= 0) {
-
-                defer.resolve(createInfo);
+            defer.resolve(createInfo);
         } else {
             // console.log("create error:", createInfo);
         }
     });
-
     return defer.promise();
 }
 
 function connect(createInfo, host, port) {
     var defer = $.Deferred();
 
-    if (typeof(port) != "number") {
+    if (typeof (port) != "number") {
         port = parseInt(port, 10);
     }
 
     chrome.socket.connect(createInfo.socketId, host, port, function (result) {
         if (result >= 0) {
-                defer.resolve(createInfo);
+            defer.resolve(createInfo);
         } else {
             chrome.socket.destroy(createInfo.socketId);
             defer.reject(createInfo);
@@ -33,13 +32,13 @@ function connect(createInfo, host, port) {
     return defer.promise();
 }
 
-function write(createInfo, str,n) {
+function write(createInfo, str, n) {
     var defer = $.Deferred();
 
     stringToArrayBuffer(str, function (bytes) {
         writeBytes(createInfo, bytes)
             .then(function (createInfo) {
-                if(n){
+                if (n) {
                     read(createInfo.createInfo, 4);
                 }
                 defer.resolve(createInfo);
@@ -55,11 +54,11 @@ function writeBytes(createInfo, bytes) {
     chrome.socket.write(createInfo.socketId, bytes, function (writeInfo) {
         // console.log("writeInfo:", writeInfo);
         if (writeInfo.bytesWritten > 0) {
-                var param = {
-                    createInfo: createInfo,
-                    writeInfo: writeInfo
-                };
-                defer.resolve(param);
+            var param = {
+                createInfo: createInfo,
+                writeInfo: writeInfo
+            };
+            defer.resolve(param);
 
         } else {
             // console.log("write error:", arrayBuffer);
@@ -77,11 +76,11 @@ function read(createInfo, size) {
         if (readInfo.resultCode > 0) {
             // console.log(readInfo);
             arrayBufferToString(readInfo.data, function (str) {
-                    var param = {
-                        createInfo: createInfo,
-                        data: str
-                    };
-                    defer.resolve(param);
+                var param = {
+                    createInfo: createInfo,
+                    data: str
+                };
+                defer.resolve(param);
 
             });
         } else {
@@ -100,6 +99,7 @@ function stringToArrayBuffer(str, callback) {
     };
     f.readAsArrayBuffer(b);
 }
+
 function arrayBufferToString(buf, callback) {
     var b = new Blob([new Uint8Array(buf)]);
     var f = new FileReader();
@@ -108,7 +108,8 @@ function arrayBufferToString(buf, callback) {
     };
     f.readAsText(b);
 }
-function getNewCommandPromise (cmd) {
+
+function getNewCommandPromise(cmd) {
     return create()
         .then(function (createInfo) {
             return connect(createInfo, host, port);
@@ -122,17 +123,14 @@ function getNewCommandPromise (cmd) {
             return read(param.createInfo, 4);
         })
         .catch(function (param) {
-            console.log('error2:'+param)
+            console.log('error2:' + param);
         });
 }
 
-function getCommandPromise (cmd, createInfo) {
+function getCommandPromise(cmd, createInfo) {
     var cmdWidthLength = makeCommand(cmd);
     return write(createInfo, cmdWidthLength)
         .then(function (param) {
             return read(param.createInfo, 1024);
         });
 }
-
-
-
