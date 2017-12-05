@@ -1,0 +1,44 @@
+{
+    "name": "Smart Arrow",
+    "version": "0.1.0",
+    "description": "This application displays android phone screens that are connected to your computer and controls them with ADB.",
+    "manifest_version": 2,
+    "minimum_chrome_version": "40.0.2213.0",
+    "app": {
+        "background": {
+            "scripts": [
+                "background.js"
+            ]
+        }
+    },
+    "permissions": [
+        "usb",
+        {
+            "fileSystem": [
+                "write",
+                "directory"
+            ]
+        },
+        {
+            "socket": [
+                "tcp-connect:*:*"
+            ]
+        },
+        "notifications"
+    ],
+    "commands": {},
+    "icons": {
+        "16": "assets/ss_icon11.png",
+        "48": "assets/ss_icon@2x.png",
+        "128": "assets/ss_icon@3x.png"
+    },
+    "requirements": {},
+    "sockets": {
+        "tcp": {
+            "connect": "*"
+        },
+        "tcpServer": {
+            "listen": "*"
+        }
+    }
+}
