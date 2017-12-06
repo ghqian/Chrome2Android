@@ -7,6 +7,7 @@ var ratioWidth = 1;
 var ratioHeight = 1;
 var canvas = $('#mat_canvas');
 var socketIds = {};
+var client, currentDevice;
 
 function ratio(real) {
     ratioWidth = real.width / canvas.width();
@@ -55,31 +56,17 @@ function mousemoveListener(socketId) {
     }
 }
 
-var client, deviceObj;
 $(window).ready(function () {
-    deviceObj = JSON.parse(chrome.app.window.current().id);
+    currentDevice = JSON.parse(chrome.app.window.current().id);
     client = new Tcp();
-    var device = deviceObj.device;
-    sendCommands('client', "shell:find /data/local/tmp/minicap", deviceObj.serialNumber, () => {
-        console.log('findMinicap' + client.socketId);
-        socketIds.findMinicap = client.socketId;
+    var device = currentDevice.device;
+    client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
+        console.log('findMinicap' + socketId);
+        socketIds.findMinicap = socketId;
     });
     minicapSocket(device);
     minitouchSocket(device);
-
 });
-
-
-function closeSocket() {
-    var callback = function () {
-        if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
-    };
-    for (var id in socketIds) {
-        console.log('close socket:', socketIds[id]);
-        chrome.sockets.tcp.close(socketIds[id], callback);
-    }
-    socketIds = {};
-}
 
 function minitouchSocket(device) {
     if (socketIds.minitouch)
@@ -104,7 +91,6 @@ function minicapSocket(device) {
         });
     });
 }
-
 
 chrome.sockets.tcp.onReceive.addListener(function (message) {
     if (message.socketId) {
@@ -150,7 +136,7 @@ function socketReceive(e) {
     console.log('receive:' + e);
     // 这里准备推送文件
     // if(e == 'arm64-v8a'){
-    //   sendCommands("getprop ro.build.version.sdk | tr -d '\r'",'RO5PBM5LQWJZDQCM',()=>{})
+    //   sendCommands("getprop ro.build.version.sdk | tr -d '\r'",'RO5PBM5LQWJZDQCM',(socketId)=>{})
     // } else if (!isNaN(e)){
     //   sendCommands('')
     // }
@@ -174,7 +160,6 @@ var banner = {
     orientation: 0,
     quirks: 0
 };
-
 
 function tryRead(message) {
     var chunk = new Uint8Array(message.data);
@@ -316,21 +301,19 @@ function DrawImage(frameBody) {
 /*buttons*/
 //187多任务   3主页  4返回      26锁屏
 document.getElementById('mat_back').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 4", deviceObj.serialNumber, () => {});
+    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_home').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 3", deviceObj.serialNumber, () => {});
+    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_tasks').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 187", deviceObj.serialNumber, () => {
-
-    });
+    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {});
 });
 
 /*监听拔调设备*/
 if (chrome.usb.onDeviceRemoved) {
     chrome.usb.onDeviceRemoved.addListener(function (device) {
-        if ((device.serialNumber + device.device) == (deviceObj.serialNumber + deviceObj.device)) {
+        if ((device.serialNumber + device.device) == (currentDevice.serialNumber + currentDevice.device)) {
             chrome.app.window.current().close();
         }
     });

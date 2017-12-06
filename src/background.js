@@ -6,6 +6,6 @@ chrome.app.runtime.onLaunched.addListener(function () {
             minWidth: 670,
             minHeight: 550
         },
-        id: "ChromeApps-Sample-USB-DeviceInfo"
+        id: "Chrome2Android"
     });
 });

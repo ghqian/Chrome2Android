@@ -1,6 +1,7 @@
 /*jshint esversion: 6 */
 function Tcp() {
     var _tcp = chrome.sockets.tcp;
+    var counter = 0;
     this.address = '127.0.0.1';
     this.port = 5037;
     this.option = {
@@ -79,39 +80,38 @@ function Tcp() {
     this.getSockets = function (callback) {
         _tcp.getSockets(callback);
     }.bind(this);
-}
-var counter = 0;
 
-function sendCommands(type, cmd, serial, callback) {
-    //性能优化考虑
-    if (++counter % 10 == 0) {
-        client.getSockets((e) => {
-            e.forEach(function (value) {
-                !value.peerPort && chrome.sockets.tcp.close(value.socketId, () => {}); // jshint ignore:line
+    this.sendCommands = function (type, cmd, serial, callback) {
+        //性能优化考虑
+        if (++counter % 10 == 0) {
+            this.getSockets((e) => {
+                e.forEach(function (value) {
+                    !value.peerPort && chrome.sockets.tcp.close(value.socketId, () => {}); // jshint ignore:line
+                });
             });
-        });
-    }
-    client.init(function () {
-        client.connect(function () {
-            //exeCommands(cmd,serial,callback)
-            if (type == 'host') {
-                //服务端命令直接运行
-                client.send(str2ab(makeCommand(cmd)), () => {
-                    callback();
-                    socketIds.tcp5037 = client.socketId;
-                });
-            } else if (type == 'client') {
-                //客户端命令，需要先链接客户端
-                var conDevice = 'host:transport:' + serial;
-                client.send(str2ab(makeCommand(conDevice)), function () {
-                    client.send(str2ab(makeCommand(cmd)), () => {
-                        callback();
-                        socketIds.tcp5037 = client.socketId;
-                    });
-                });
-            }
-        });
-    });
+        }
+        this.init(function () {
+            this.connect(function () {
+                //exeCommands(cmd,serial,callback)
+                if (type == 'host') {
+                    //服务端命令直接运行
+                    this.send(str2ab(makeCommand(cmd)), function () {
+                        callback(this.socketId);
+                        socketIds.tcp5037 = this.socketId;
+                    }.bind(this));
+                } else if (type == 'client') {
+                    //客户端命令，需要先链接客户端
+                    var conDevice = 'host:transport:' + serial;
+                    this.send(str2ab(makeCommand(conDevice)), function () {
+                        this.send(str2ab(makeCommand(cmd)), function () {
+                            callback(this.socketId);
+                            socketIds.tcp5037 = this.socketId;
+                        }.bind(this));
+                    }.bind(this));
+                }
+            }.bind(this));
+        }.bind(this));
+    }.bind(this);
 }
 
 function str2ab(oldStr, newAB, end) {
@@ -146,23 +146,5 @@ function makeCommand(cmd) {
         hex = "0" + hex;
     }
     cmd = hex + cmd;
-
     return cmd;
-}
-
-function throwTip(tips, type) {
-    tips = tips || '无初始tips';
-    type = type || 'danger';
-    var tmpl = `<div class="row alert alert-` + type + ` alert-dismissible" role="alert">
-      <div class="col-xs-2">
-        <strong>tips!</strong>
-      </div>
-      <div class="col-xs-9">
-        <span>` + tips + `</span>
-      </div>
-      <div class="col-xs-1">
-        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
-      </div>
-    </div>`;
-    $('.container').before(tmpl);
 }

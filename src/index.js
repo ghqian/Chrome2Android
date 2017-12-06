@@ -11,15 +11,31 @@ var client = new Tcp();
 var tips = "请先启动adb服务，再使用此应用:run '$adb start-server'";
 throwTip(tips, 'info');
 
-function closeSocket(screenWin) {
+function throwTip(tips, type) {
+    tips = tips || '无初始tips';
+    type = type || 'danger';
+    var tmpl = `<div class="row alert alert-` + type + ` alert-dismissible" role="alert">
+      <div class="col-xs-2">
+        <strong>tips!</strong>
+      </div>
+      <div class="col-xs-9">
+        <span>` + tips + `</span>
+      </div>
+      <div class="col-xs-1">
+        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+      </div>
+    </div>`;
+    $('.container').before(tmpl);
+}
+
+function closeSocket(screenSocketIds) {
     var callback = () => {
         if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
     };
-    for (var id in screenWin.contentWindow.socketIds) {
-        console.log('close socket:', screenWin.contentWindow.socketIds[id]);
-        chrome.sockets.tcp.close(screenWin.contentWindow.socketIds[id], callback);
+    for (var id in screenSocketIds) {
+        console.log('close socket:', screenSocketIds[id]);
+        chrome.sockets.tcp.close(screenSocketIds[id], callback);
     }
-    screenWin.socketIds = {};
 }
 
 function createDeviceLi(device, fragment) {
@@ -35,11 +51,11 @@ function createDeviceLi(device, fragment) {
     li.appendChild(btn);
     fragment.appendChild(li);
     setTimeout(function () {
-        sendCommands('client', "shell:wm size", device.serialNumber, () => {
-            socketIds[client.socketId] = device.device + device.serialNumber;
+        client.sendCommands('client', "shell:wm size", device.serialNumber, (socketId) => {
+            socketIds[socketId] = device.device + device.serialNumber;
         });
     }, 2000);
-    
+
     /*
      * 刚插入手机的时候还需要检测是否有文件，如果没有则安装
      * 安装前需要获取手机的框架，还有sdk版本，再然后推两个文件
@@ -48,13 +64,13 @@ function createDeviceLi(device, fragment) {
         if (!device.SCsize) {
             device.SCsize = '1080x1920';
         }
-        sendCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, () => {
-            socketIds[client.socketId] = device.device + device.serialNumber;
+        client.sendCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, (socketId) => {
+            socketIds[socketId] = device.device + device.serialNumber;
         });
 
         setTimeout(function () {
-            sendCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, () => {
-                socketIds[client.socketId] = device.device + device.serialNumber;
+            client.sendCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, (socketId) => {
+                socketIds[socketId] = device.device + device.serialNumber;
             });
         }, 800);
 
@@ -71,10 +87,10 @@ function createDeviceLi(device, fragment) {
                 maxHeight: screenHeight,
                 minWidth: screenWidth,
                 minHeight: screenHeight,
-
             }, function (screenWin) {
                 screenWin.onClosed.addListener(callback = function () {
-                    closeSocket(screenWin);
+                    closeSocket(screenWin.contentWindow.socketIds);
+                    screenWin.contentWindow.socketIds = {};
                     screenWin.onClosed.removeListener(callback);
                 });
             });
@@ -85,93 +101,90 @@ function createDeviceLi(device, fragment) {
     });
 }
 
-function appendLi(devicesArr) {
-    var fragment = document.createDocumentFragment();
-    devicesArr.forEach((item, index) => {
-        if (!devices[item.device + item.serialNumber]) {
-            devices[item.device + item.serialNumber] = item;
-            devices[item.device + item.serialNumber].capPort = 3131 + item.device;
-            devices[item.device + item.serialNumber].touchPort = 1111 + item.device;
-            createDeviceLi(devices[item.device + item.serialNumber], fragment);
+function appendLi(device) {
+    var exist = device.device + device.serialNumber in devices;
+    var fragment;
 
-            //检查ABI
-            console.log('这次手机的serial:' + item.serialNumber);
-            sendCommands('client', "shell:getprop ro.product.cpu.abi | tr -d '\r'", item.serialNumber, () => {
-                console.log('ABI' + client.socketId);
-                socketIds.searchId = client.socketId;
-                socketIds[client.socketId] = item.device + item.serialNumber;
-                var t1 = setTimeout(() => {
-                    if (tmpRes.startsWith('arm') || tmpRes.startsWith('x86')) {
-                        var regRN = /\r\n/g;
-                        tmpRes = tmpRes.replace(regRN, "");
-                        devices[item.device + item.serialNumber].ABI = tmpRes;
-                        sendCommands('client', "shell:getprop ro.build.version.sdk | tr -d '\r'", item.serialNumber, () => {
-                            socketIds.searchId = client.socketId;
-                            console.log('SDK' + client.socketId);
-                            socketIds[client.socketId] = item.device + item.serialNumber;
-                            var t2 = setTimeout(() => {
-                                if (!isNaN(tmpRes)) {
-                                    var regRN = /\r\n/g;
-                                    tmpRes = tmpRes.replace(regRN, "");
-                                    devices[item.device + item.serialNumber].SDK = tmpRes;
-                                    var serial = item.serialNumber;
-                                    //开始推文件
-                                    var url3 = '/file/minitouch/' + devices[item.device + item.serialNumber].ABI + '/minitouch';
-                                    getData(url3, serial);
-                                    var url1 = '/file/prebuilt/' + devices[item.device + item.serialNumber].ABI + '/bin/minicap';
-                                    getData(url1, serial);
-                                    var url2 = '/file/prebuilt/' + devices[item.device + item.serialNumber].ABI + '/lib/android-' + devices[item.device + item.serialNumber].SDK + '/minicap.so';
-                                    getData(url2, serial);
-                                    var url4 = '/file/minirev/' + devices[item.device + item.serialNumber].ABI + '/minirev';
-                                    getData(url4, serial);
+    devices[device.device + device.serialNumber] = device;
+    devices[device.device + device.serialNumber].capPort = 3131 + device.device;
+    devices[device.device + device.serialNumber].touchPort = 1111 + device.device;
+    if (!exist) {
+        fragment = document.createDocumentFragment();
+        createDeviceLi(devices[device.device + device.serialNumber], fragment);
+    }
 
-                                }
-                                clearTimeout(t2);
-                                tmpRes = '';
-                            }, 2000);
-
-                        });
-
-                    }
-                    clearTimeout(t1);
-                    tmpRes = '';
-                }, 3000);
-            });
-
-        } else {
-            $('#' + item.device + item.serialNumber).css('background-color', '#ccc');
-        }
-
+    //检查ABI
+    console.log('这次手机的serial:' + device.serialNumber);
+    client.sendCommands('client', "shell:getprop ro.product.cpu.abi | tr -d '\r'", device.serialNumber, (socketId) => {
+        console.log('ABI' + socketId);
+        socketIds.searchId = socketId;
+        socketIds[socketId] = device.device + device.serialNumber;
+        var t1 = setTimeout(() => {
+            if (tmpRes.startsWith('arm') || tmpRes.startsWith('x86')) {
+                var regRN = /\r\n/g;
+                tmpRes = tmpRes.replace(regRN, "");
+                devices[device.device + device.serialNumber].ABI = tmpRes;
+                client.sendCommands('client', "shell:getprop ro.build.version.sdk | tr -d '\r'", device.serialNumber, (socketId) => {
+                    socketIds.searchId = socketId;
+                    console.log('SDK' + socketId);
+                    socketIds[socketId] = device.device + device.serialNumber;
+                    var t2 = setTimeout(() => {
+                        if (!isNaN(tmpRes)) {
+                            var regRN = /\r\n/g;
+                            tmpRes = tmpRes.replace(regRN, "");
+                            devices[device.device + device.serialNumber].SDK = tmpRes;
+                            var serial = device.serialNumber;
+                            //开始推文件
+                            var url3 = '/file/minitouch/' + devices[device.device + device.serialNumber].ABI + '/minitouch';
+                            getData(url3, serial);
+                            var url1 = '/file/prebuilt/' + devices[device.device + device.serialNumber].ABI + '/bin/minicap';
+                            getData(url1, serial);
+                            var url2 = '/file/prebuilt/' + devices[device.device + device.serialNumber].ABI + '/lib/android-' + devices[device.device + device.serialNumber].SDK + '/minicap.so';
+                            getData(url2, serial);
+                            var url4 = '/file/minirev/' + devices[device.device + device.serialNumber].ABI + '/minirev';
+                            getData(url4, serial);
+                        }
+                        clearTimeout(t2);
+                        tmpRes = '';
+                    }, 2000);
+                });
+            }
+            clearTimeout(t1);
+            tmpRes = '';
+        }, 3000);
     });
-    ul.append(fragment);
+    if (exist) {
+        $('#' + device.device + device.serialNumber).css('background-color', '#ccc');
+    } else {
+        ul.append(fragment);
+    }
 }
 
 //发送 adb devices 查询设备状态是否可用
-function adbDevices(devicesArr) {
-    sendCommands('host', "host:devices", null, () => {
+function adbDevice(device) {
+    client.sendCommands('host', "host:devices", null, (socketId) => {
         //console.log('查询SDK')
-        console.log('devices-l:' + client.socketId);
-        socketIds.findDevice = client.socketId;
-        socketIds[client.socketId] = client.socketId;
+        console.log('devices-l:' + socketId);
+        socketIds.findDevice = socketId;
+        socketIds[socketId] = socketId;
         var t3 = setTimeout(function () {
             console.log('tmpDevices:' + tmpDevices);
             var arr = tmpDevices.split('\n');
             console.log('开始查询状态');
             var callback = function () {
                 //改变按钮
-                $('#' + devicesArr[0].device + devicesArr[0].serialNumber).find('button').html('view').removeAttr('disabled').removeClass('btn-warning').addClass('btn-success');
+                $('#' + device.device + device.serialNumber).find('button').html('view').removeAttr('disabled').removeClass('btn-warning').addClass('btn-success');
             };
             var opt;
             for (var i = 0; i < arr.length; i++) {
                 console.log('进入循环');
-                if (arr[i].indexOf(devicesArr[0].serialNumber) != -1) {
+                if (arr[i].indexOf(device.serialNumber) != -1) {
                     if (arr[i].indexOf('device') != -1) {
                         console.log('状态可用');
                         //状态可用
                         //设置定时器 6s之后检查是否文件推送完成
-                        appendLi(devicesArr);
+                        appendLi(device);
                         setTimeout(callback, 6000);
-
                     } else if (arr[i].indexOf('unauthorized') != -1) {
                         console.log('没授权');
                         //设置定时器 6s之后检查是否文件推送完成
@@ -224,7 +237,7 @@ $('#mat_findDevice').click(() => {
     }, function (devicesArr) {
         console.log(devicesArr);
         if (devicesArr.length > 0) {
-            adbDevices(devicesArr);
+            adbDevice(devicesArr[0]);
         }
     });
 });
@@ -282,9 +295,9 @@ chrome.sockets.tcp.onReceive.addListener(function (msg) {
                 var tmp = reg.exec(e);
                 devices[socketIds[msg.socketId]].SCsize = tmp[0];
             } else if (e.indexOf('Publishing virtual display') != -1) {
-                sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].capPort + ";localabstract:minicap", devices[socketIds[msg.socketId]].serialNumber, () => {});
+                client.sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].capPort + ";localabstract:minicap", devices[socketIds[msg.socketId]].serialNumber, (socketId) => {});
             } else if (e.indexOf('touch device') != -1) {
-                sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketIds[msg.socketId]].serialNumber, () => {});
+                client.sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketIds[msg.socketId]].serialNumber, (socketId) => {});
             }
         });
     }
