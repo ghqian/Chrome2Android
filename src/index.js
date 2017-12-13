@@ -1,6 +1,6 @@
 /*jshint esversion: 6 */
 var devices = {};
-var socketIds = {};
+var socketPool = {};
 var ul = $('#deviceList');
 var temp;
 var tmpRes = '';
@@ -52,7 +52,7 @@ function createDeviceLi(device, fragment) {
     fragment.appendChild(li);
     setTimeout(function () {
         client.sendCommands('client', "shell:wm size", device.serialNumber, (socketId) => {
-            socketIds[socketId] = device.device + device.serialNumber;
+            socketPool[socketId] = device.device + device.serialNumber;
         });
     }, 2000);
 
@@ -65,12 +65,12 @@ function createDeviceLi(device, fragment) {
             device.SCsize = '1080x1920';
         }
         client.sendCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, (socketId) => {
-            socketIds[socketId] = device.device + device.serialNumber;
+            socketPool[socketId] = device.device + device.serialNumber;
         });
 
         setTimeout(function () {
             client.sendCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, (socketId) => {
-                socketIds[socketId] = device.device + device.serialNumber;
+                socketPool[socketId] = device.device + device.serialNumber;
             });
         }, 800);
 
@@ -87,17 +87,9 @@ function createDeviceLi(device, fragment) {
                 maxHeight: screenHeight,
                 minWidth: screenWidth,
                 minHeight: screenHeight,
-            }, function (screenWin) {
-                screenWin.onClosed.addListener(callback = function () {
-                    closeSocket(screenWin.contentWindow.socketIds);
-                    screenWin.contentWindow.socketIds = {};
-                    screenWin.onClosed.removeListener(callback);
-                });
             });
         }, 3000);
-
         $(e).parents('li').css('backgroundColor', '#ccc').siblings('li').css('backgroundColor', 'none');
-
     });
 }
 
@@ -117,17 +109,17 @@ function appendLi(device) {
     console.log('这次手机的serial:' + device.serialNumber);
     client.sendCommands('client', "shell:getprop ro.product.cpu.abi | tr -d '\r'", device.serialNumber, (socketId) => {
         console.log('ABI' + socketId);
-        socketIds.searchId = socketId;
-        socketIds[socketId] = device.device + device.serialNumber;
+        socketPool.searchId = socketId;
+        socketPool[socketId] = device.device + device.serialNumber;
         var t1 = setTimeout(() => {
             if (tmpRes.startsWith('arm') || tmpRes.startsWith('x86')) {
                 var regRN = /\r\n/g;
                 tmpRes = tmpRes.replace(regRN, "");
                 devices[device.device + device.serialNumber].ABI = tmpRes;
                 client.sendCommands('client', "shell:getprop ro.build.version.sdk | tr -d '\r'", device.serialNumber, (socketId) => {
-                    socketIds.searchId = socketId;
+                    socketPool.searchId = socketId;
                     console.log('SDK' + socketId);
-                    socketIds[socketId] = device.device + device.serialNumber;
+                    socketPool[socketId] = device.device + device.serialNumber;
                     var t2 = setTimeout(() => {
                         if (!isNaN(tmpRes)) {
                             var regRN = /\r\n/g;
@@ -165,8 +157,8 @@ function adbDevice(device) {
     client.sendCommands('host', "host:devices", null, (socketId) => {
         //console.log('查询SDK')
         console.log('devices-l:' + socketId);
-        socketIds.findDevice = socketId;
-        socketIds[socketId] = socketId;
+        socketPool.findDevice = socketId;
+        socketPool[socketId] = socketId;
         var t3 = setTimeout(function () {
             console.log('tmpDevices:' + tmpDevices);
             var arr = tmpDevices.split('\n');
@@ -273,14 +265,14 @@ if (chrome.usb.onDeviceRemoved) {
     });
 }
 chrome.sockets.tcp.onReceive.addListener(function (msg) {
-    if (socketIds[msg.socketId]) {
+    if (socketPool[msg.socketId]) {
         ab2str(msg.data, function (e) {
-            if (socketIds.searchId && msg.socketId == socketIds.searchId) {
+            if (socketPool.searchId && msg.socketId == socketPool.searchId) {
                 e = e.trim();
                 if (e != 'OKAY') {
                     tmpRes = tmpRes + e;
                 }
-            } else if (socketIds.findDevice && msg.socketId == socketIds.findDevice) {
+            } else if (socketPool.findDevice && msg.socketId == socketPool.findDevice) {
                 e = e.trim();
                 console.log(msg.socketId + ':::::' + e);
                 if (e != 'OKAY') {
@@ -293,11 +285,11 @@ chrome.sockets.tcp.onReceive.addListener(function (msg) {
             } else if (e.indexOf('Physical size:') != -1) {
                 var reg = /([0-9]+)x([0-9]+)/g;
                 var tmp = reg.exec(e);
-                devices[socketIds[msg.socketId]].SCsize = tmp[0];
+                devices[socketPool[msg.socketId]].SCsize = tmp[0];
             } else if (e.indexOf('Publishing virtual display') != -1) {
-                client.sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].capPort + ";localabstract:minicap", devices[socketIds[msg.socketId]].serialNumber, (socketId) => {});
+                client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].capPort + ";localabstract:minicap", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {});
             } else if (e.indexOf('touch device') != -1) {
-                client.sendCommands('host', "host-serial:" + devices[socketIds[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketIds[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketIds[msg.socketId]].serialNumber, (socketId) => {});
+                client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {});
             }
         });
     }

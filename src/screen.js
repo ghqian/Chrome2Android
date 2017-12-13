@@ -1,4 +1,5 @@
 /*jshint esversion: 6 */
+
 var real = {
     width: 1080,
     height: 1920
@@ -6,7 +7,7 @@ var real = {
 var ratioWidth = 1;
 var ratioHeight = 1;
 var canvas = $('#mat_canvas');
-var socketIds = {};
+var socketPool = {};
 var client, currentDevice;
 
 function ratio(real) {
@@ -57,47 +58,35 @@ function mousemoveListener(socketId) {
 }
 
 $(window).ready(function () {
-    currentDevice = JSON.parse(chrome.app.window.current().id);
-    client = new Tcp();
-    var device = currentDevice.device;
-    client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
-        console.log('findMinicap' + socketId);
-        socketIds.findMinicap = socketId;
+    chrome.app.window.current().onClosed.addListener(function () {
+        var callback = () => {
+            if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
+        };
+        for (var id in socketPool) {
+            console.log('close socket:', socketPool[id]);
+            chrome.sockets.tcp.close(socketPool[id], callback);
+        }
+        socketPool = {};
     });
-    minicapSocket(device);
-    minitouchSocket(device);
+    client = new Tcp();
+    currentDevice = JSON.parse(chrome.app.window.current().id);
+    var device = currentDevice.device;
+    findMinicap(device);
+    connectMinicap(device);
+    connectMinitouch(device);
 });
 
-function minitouchSocket(device) {
-    if (socketIds.minitouch)
-        return;
-    chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 1111 + device, function () {
-            console.log(1111 + device);
-            socketIds.minitouch = createInfo.socketId;
-            $('#mat_canvas').on('mousedown', mousedownListener.bind(null, createInfo.socketId));
-            $('#mat_canvas').on('mouseup', mouseupListener.bind(null, createInfo.socketId));
-        });
+function findMinicap() {
+    client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
+        console.log('findMinicap' + socketId);
+        socketPool.findMinicap = socketId;
     });
-}
-
-function minicapSocket(device) {
-    if (socketIds.minicap)
-        return;
-    chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, "127.0.0.1", 3131 + device, function (result) {
-            console.log(3131 + device);
-            socketIds.minicap = createInfo.socketId;
-        });
-    });
-}
-
-chrome.sockets.tcp.onReceive.addListener(function (message) {
-    if (message.socketId) {
-        if (message.socketId == socketIds.findMinicap) {
+    var callback = function (message) {
+        if (message.socketId && message.socketId == socketPool.findMinicap) {
             ab2str(message.data, function (e) {
                 console.log('返回值' + e);
                 if (e.startsWith('OKAY')) {
+                    chrome.sockets.tcp.onReceive.removeListener(callback);
                     return null;
                 } else if (e.indexOf('No such file') != -1) {
                     //弹出提示信息
@@ -112,16 +101,48 @@ chrome.sockets.tcp.onReceive.addListener(function (message) {
                     var div = document.createElement('div');
                     $(div).attr('id', 'mat_error');
                     $('body').append(div);
-
                 }
             });
         }
+    };
+    chrome.sockets.tcp.onReceive.addListener(callback);
+}
 
-        if (socketIds.minicap && (socketIds.minicap == message.socketId)) {
-            tryRead(message); //minicap receive callback
-        } else if (socketIds.minitouch && (socketIds.minitouch == message.socketId)) {
+function connectMinitouch(device) {
+    if (socketPool.minitouch)
+        return;
+    chrome.sockets.tcp.create(function (createInfo) {
+        chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 1111 + device, function () {
+            socketPool.minitouch = createInfo.socketId;
+            $('#mat_canvas').on('mousedown', mousedownListener.bind(null, createInfo.socketId));
+            $('#mat_canvas').on('mouseup', mouseupListener.bind(null, createInfo.socketId));
+        });
+    });
+    chrome.sockets.tcp.onReceive.addListener(function (message) {
+        if (message.socketId && socketPool.minitouch && (socketPool.minitouch == message.socketId)) {
             //touchReceive(message.data);
-        } else if (socketIds.tcp5037 && message.socketId == socketIds.tcp5037) {
+        }
+    });
+}
+
+function connectMinicap(device) {
+    if (socketPool.minicap)
+        return;
+    chrome.sockets.tcp.create(function (createInfo) {
+        chrome.sockets.tcp.connect(createInfo.socketId, "127.0.0.1", 3131 + device, function (result) {
+            socketPool.minicap = createInfo.socketId;
+        });
+    });
+    chrome.sockets.tcp.onReceive.addListener(function (message) {
+        if (message.socketId && socketPool.minicap && (socketPool.minicap == message.socketId)) {
+            tryRead(message); //minicap receive callback
+        }
+    });
+}
+/*
+chrome.sockets.tcp.onReceive.addListener(function (message) {
+    if (message.socketId) {
+        if (socketIds.tcp5037 && message.socketId == socketIds.tcp5037) {
             ab2str(message.data, function (e) {
                 if (!e.startsWith('OKAY')) {
                     socketReceive(e);
@@ -141,7 +162,7 @@ function socketReceive(e) {
     //   sendCommands('')
     // }
 }
-
+*/
 
 var readBannerBytes = 0;
 var bannerLength = 2;

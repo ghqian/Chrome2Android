@@ -17,7 +17,7 @@ function Tcp() {
         }.bind(this));
     }.bind(this);
 
-    this.update = function () {
+    this.update = function (caLlback) {
         _tcp.update(this.socketId, newSocketOption, callback);
     }.bind(this);
 
@@ -86,7 +86,8 @@ function Tcp() {
         if (++counter % 10 == 0) {
             this.getSockets((e) => {
                 e.forEach(function (value) {
-                    !value.peerPort && chrome.sockets.tcp.close(value.socketId, () => {}); // jshint ignore:line
+                    if (value.peerPort)
+                        chrome.sockets.tcp.close(value.socketId, function () {});
                 });
             });
         }
@@ -97,7 +98,7 @@ function Tcp() {
                     //服务端命令直接运行
                     this.send(str2ab(makeCommand(cmd)), function () {
                         callback(this.socketId);
-                        socketIds.tcp5037 = this.socketId;
+                        socketPool.tcp5037 = this.socketId;
                     }.bind(this));
                 } else if (type == 'client') {
                     //客户端命令，需要先链接客户端
@@ -105,7 +106,7 @@ function Tcp() {
                     this.send(str2ab(makeCommand(conDevice)), function () {
                         this.send(str2ab(makeCommand(cmd)), function () {
                             callback(this.socketId);
-                            socketIds.tcp5037 = this.socketId;
+                            socketPool.tcp5037 = this.socketId;
                         }.bind(this));
                     }.bind(this));
                 }

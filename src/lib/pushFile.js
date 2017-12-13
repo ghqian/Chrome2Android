@@ -122,7 +122,6 @@ function getData(url, serial) {
                 }
             };
             reader.readAsArrayBuffer(data);
-
         })
         .fail(function (e) {
             console.log(e);
