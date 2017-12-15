@@ -78,7 +78,8 @@ $(window).ready(function () {
 
 function findMinicap() {
     client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
-        console.log('findMinicap' + socketId);
+        console.log('findMinicap' + socketId);            
+        socketPool.tcp5037 = socketId;
         socketPool.findMinicap = socketId;
     });
     var callback = function (message) {
@@ -322,13 +323,19 @@ function DrawImage(frameBody) {
 /*buttons*/
 //187多任务   3主页  4返回      26锁屏
 document.getElementById('mat_back').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {});
+    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {
+        socketPool.tcp5037 = socketId;        
+    });
 });
 document.getElementById('mat_home').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {});
+    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {
+        socketPool.tcp5037 = socketId;        
+    });
 });
 document.getElementById('mat_tasks').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {});
+    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {
+        socketPool.tcp5037 = socketId;        
+    });
 });
 
 /*监听拔调设备*/

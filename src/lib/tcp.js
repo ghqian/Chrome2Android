@@ -1,6 +1,6 @@
 /*jshint esversion: 6 */
 function Tcp() {
-    var _tcp = chrome.sockets.tcp;
+    
     var counter = 0;
     this.address = '127.0.0.1';
     this.port = 5037;
@@ -11,22 +11,22 @@ function Tcp() {
     this.socketId = 0;
 
     this.create = function (callback) {
-        _tcp.create(this.option, function (socketInfo) {
+        chrome.sockets.tcp.create(this.option, function (socketInfo) {
             this.socketId = socketInfo.socketId;
             callback(socketInfo);
         }.bind(this));
     }.bind(this);
 
     this.update = function (caLlback) {
-        _tcp.update(this.socketId, newSocketOption, callback);
+        chrome.sockets.tcp.update(this.socketId, newSocketOption, callback);
     }.bind(this);
 
     this.pause = function (isPaused, callback) {
-        _tcp.setPaused(this.socketId, isPaused, callback);
+        chrome.sockets.tcp.setPaused(this.socketId, isPaused, callback);
     }.bind(this);
 
     this.keepAlive = function (enable, delay, callback) {
-        _tcp.setKeepAlive(this.socketId, enable, delay, function (code) {
+        chrome.sockets.tcp.setKeepAlive(this.socketId, enable, delay, function (code) {
             if (code < 0) {
                 this.error(code);
             } else {
@@ -36,7 +36,7 @@ function Tcp() {
     }.bind(this);
 
     this.noDelay = function (noDelay, callback) {
-        _tcp.setNoDelay(this.socketId, noDelay, function (code) {
+        chrome.sockets.tcp.setNoDelay(this.socketId, noDelay, function (code) {
             if (code < 0) {
                 this.error(code);
             } else {
@@ -46,11 +46,11 @@ function Tcp() {
     }.bind(this);
 
     this.disconnect = function (callback) {
-        _tcp.disconnect(this.socketId, callback);
+        chrome.sockets.tcp.disconnect(this.socketId, callback);
     }.bind(this);
 
     this.close = function (callback) {
-        _tcp.close(this.socketId, callback);
+        chrome.sockets.tcp.close(this.socketId, callback);
     }.bind(this);
 
     this.error = function (code) {
@@ -62,7 +62,7 @@ function Tcp() {
     }.bind(this);
 
     this.connect = function (callback) {
-        _tcp.connect(this.socketId, this.address, this.port, function (e) {
+        chrome.sockets.tcp.connect(this.socketId, this.address, this.port, function (e) {
             // this.pause(false,()=>{});
             // this.noDelay(false,()=>{});
             callback();
@@ -70,15 +70,15 @@ function Tcp() {
     }.bind(this);
 
     this.send = function (data, callback) {
-        _tcp.send(this.socketId, data, callback);
+        chrome.sockets.tcp.send(this.socketId, data, callback);
     }.bind(this);
 
     this.getInfo = function (callback) {
-        _tcp.getInfo(this.socketId, callback);
+        chrome.sockets.tcp.getInfo(this.socketId, callback);
     }.bind(this);
 
     this.getSockets = function (callback) {
-        _tcp.getSockets(callback);
+        chrome.sockets.tcp.getSockets(callback);
     }.bind(this);
 
     this.sendCommands = function (type, cmd, serial, callback) {
@@ -98,7 +98,6 @@ function Tcp() {
                     //服务端命令直接运行
                     this.send(str2ab(makeCommand(cmd)), function () {
                         callback(this.socketId);
-                        socketPool.tcp5037 = this.socketId;
                     }.bind(this));
                 } else if (type == 'client') {
                     //客户端命令，需要先链接客户端
@@ -106,7 +105,6 @@ function Tcp() {
                     this.send(str2ab(makeCommand(conDevice)), function () {
                         this.send(str2ab(makeCommand(cmd)), function () {
                             callback(this.socketId);
-                            socketPool.tcp5037 = this.socketId;
                         }.bind(this));
                     }.bind(this));
                 }

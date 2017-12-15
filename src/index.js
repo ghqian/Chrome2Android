@@ -8,8 +8,60 @@ var tmpDevices = '';
 var screenWidth = 371;
 var screenHeight = 710;
 var client = new Tcp();
-var tips = "请先启动adb服务，再使用此应用:run '$adb start-server'";
-throwTip(tips, 'info');
+
+$(window).ready(function () {
+
+    $('#mat_findDevice').click(() => {
+        chrome.usb.getUserSelectedDevices({
+            'multiple': false,
+            filters: [{
+                interfaceClass: 255,
+                interfaceSubclass: 66,
+                interfaceProtocol: 1
+            }]
+        }, function (usbArr) {
+            console.log(usbArr);
+            if (usbArr.length > 0) {
+                adbDevice(usbArr[0]);
+            }
+        });
+    });
+
+    if (chrome.usb.onDeviceRemoved) {
+        chrome.usb.onDeviceRemoved.addListener(function (device) {
+            delete devices[device.device + device.serialNumber];
+            var lis = ul.find('li');
+            lis.remove('#' + device.device + device.serialNumber);
+        });
+    }
+
+    /*
+
+    chrome.usb.getDevices({}, (devicesArr)=> {
+        if (chrome.runtime.lastError != undefined) {
+            console.warn('chrome.usb.getDevices error: ' +
+                chrome.runtime.lastError.message);
+            return;
+        }
+        temp = devicesArr;
+        if (devicesArr.length != 0) {
+            appendLi(devicesArr)
+        }
+    });
+
+    if (chrome.usb.onDeviceAdded) {
+        chrome.usb.onDeviceAdded.addListener(function (device) {
+            var arr = [];
+            arr.push(device);
+            appendLi(arr);
+            devices[device.device + device.serialNumber] = device;
+        });
+    }
+    */
+
+    throwTip("请先启动adb服务，再使用此应用:run '$adb start-server'", 'info');
+
+});
 
 function throwTip(tips, type) {
     tips = tips || '无初始tips';
@@ -28,16 +80,6 @@ function throwTip(tips, type) {
     $('.container').before(tmpl);
 }
 
-function closeSocket(screenSocketIds) {
-    var callback = () => {
-        if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
-    };
-    for (var id in screenSocketIds) {
-        console.log('close socket:', screenSocketIds[id]);
-        chrome.sockets.tcp.close(screenSocketIds[id], callback);
-    }
-}
-
 function createDeviceLi(device, fragment) {
     var li = document.createElement('li');
     var liContnt = "<span class='col-xs-3 " + (device.productName ? "text-danger" : "") + "'>" + (device.productName || "无法获取") + '</span>' + "<span class='col-xs-5 " + (device.productName ? "text-danger" : "") + "'>" + (device.serialNumber || "无法获取") + '</span>';
@@ -52,6 +94,7 @@ function createDeviceLi(device, fragment) {
     fragment.appendChild(li);
     setTimeout(function () {
         client.sendCommands('client', "shell:wm size", device.serialNumber, (socketId) => {
+            socketPool.tcp5037 = socketId;
             socketPool[socketId] = device.device + device.serialNumber;
         });
     }, 2000);
@@ -65,11 +108,13 @@ function createDeviceLi(device, fragment) {
             device.SCsize = '1080x1920';
         }
         client.sendCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, (socketId) => {
+            socketPool.tcp5037 = socketId;
             socketPool[socketId] = device.device + device.serialNumber;
         });
 
         setTimeout(function () {
             client.sendCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, (socketId) => {
+                socketPool.tcp5037 = socketId;
                 socketPool[socketId] = device.device + device.serialNumber;
             });
         }, 800);
@@ -108,15 +153,33 @@ function appendLi(device) {
     //检查ABI
     console.log('这次手机的serial:' + device.serialNumber);
     client.sendCommands('client', "shell:getprop ro.product.cpu.abi | tr -d '\r'", device.serialNumber, (socketId) => {
+        socketPool.tcp5037 = socketId;
         console.log('ABI' + socketId);
         socketPool.searchId = socketId;
         socketPool[socketId] = device.device + device.serialNumber;
+
+        var callback = function (msg) {
+            if (socketId && msg.socketId == socketId) {
+                ab2str(msg.data, function (e) {
+                    e = e.trim();
+                    if (e != 'OKAY') {
+                        tmpRes = tmpRes + e;
+                    }
+                    dispatchResult(e);
+                });
+            }
+        };
+        chrome.sockets.tcp.onReceive.addListener(callback);
+
         var t1 = setTimeout(() => {
+            chrome.sockets.tcp.onReceive.removeListener(callback);
             if (tmpRes.startsWith('arm') || tmpRes.startsWith('x86')) {
+
                 var regRN = /\r\n/g;
                 tmpRes = tmpRes.replace(regRN, "");
                 devices[device.device + device.serialNumber].ABI = tmpRes;
                 client.sendCommands('client', "shell:getprop ro.build.version.sdk | tr -d '\r'", device.serialNumber, (socketId) => {
+                    socketPool.tcp5037 = socketId;
                     socketPool.searchId = socketId;
                     console.log('SDK' + socketId);
                     socketPool[socketId] = device.device + device.serialNumber;
@@ -153,29 +216,46 @@ function appendLi(device) {
 }
 
 //发送 adb devices 查询设备状态是否可用
-function adbDevice(device) {
+function adbDevice(usb) {
     client.sendCommands('host', "host:devices", null, (socketId) => {
+        socketPool.tcp5037 = socketId;
         //console.log('查询SDK')
         console.log('devices-l:' + socketId);
         socketPool.findDevice = socketId;
         socketPool[socketId] = socketId;
+
+        var callback = function (msg) {
+            if (socketId && msg.socketId == socketId) {
+                ab2str(msg.data, function (e) {
+                    e = e.trim();
+                    console.log(msg.socketId + ':::::' + e);
+                    if (e != 'OKAY') {
+                        tmpDevices = tmpDevices + e;
+                    }
+                    dispatchResult(e);
+                });
+            }
+        };
+        chrome.sockets.tcp.onReceive.addListener(callback);
+
         var t3 = setTimeout(function () {
+            chrome.sockets.tcp.onReceive.removeListener(callback);
             console.log('tmpDevices:' + tmpDevices);
             var arr = tmpDevices.split('\n');
             console.log('开始查询状态');
             var callback = function () {
                 //改变按钮
-                $('#' + device.device + device.serialNumber).find('button').html('view').removeAttr('disabled').removeClass('btn-warning').addClass('btn-success');
+                $('#' + usb.device + usb.serialNumber).find('button').html('view').removeAttr('disabled').removeClass('btn-warning').addClass('btn-success');
             };
             var opt;
             for (var i = 0; i < arr.length; i++) {
                 console.log('进入循环');
-                if (arr[i].indexOf(device.serialNumber) != -1) {
+                if (arr[i].indexOf(usb.serialNumber) != -1) {
                     if (arr[i].indexOf('device') != -1) {
                         console.log('状态可用');
                         //状态可用
                         //设置定时器 6s之后检查是否文件推送完成
-                        appendLi(device);
+                        appendLi(usb);
                         setTimeout(callback, 6000);
                     } else if (arr[i].indexOf('unauthorized') != -1) {
                         console.log('没授权');
@@ -218,79 +298,22 @@ function adbDevice(device) {
         }, 1500);
     });
 }
-$('#mat_findDevice').click(() => {
-    chrome.usb.getUserSelectedDevices({
-        'multiple': false,
-        filters: [{
-            interfaceClass: 255,
-            interfaceSubclass: 66,
-            interfaceProtocol: 1
-        }]
-    }, function (devicesArr) {
-        console.log(devicesArr);
-        if (devicesArr.length > 0) {
-            adbDevice(devicesArr[0]);
-        }
-    });
-});
 
-/*
-
-chrome.usb.getDevices({}, (devicesArr)=> {
-    if (chrome.runtime.lastError != undefined) {
-        console.warn('chrome.usb.getDevices error: ' +
-            chrome.runtime.lastError.message);
-        return;
-    }
-    temp = devicesArr;
-    if (devicesArr.length != 0) {
-        appendLi(devicesArr)
-    }
-});
-
-if (chrome.usb.onDeviceAdded) {
-    chrome.usb.onDeviceAdded.addListener(function (device) {
-        var arr = [];
-        arr.push(device);
-        appendLi(arr);
-        devices[device.device + device.serialNumber] = device;
-    });
-}
-*/
-if (chrome.usb.onDeviceRemoved) {
-    chrome.usb.onDeviceRemoved.addListener(function (device) {
-        delete devices[device.device + device.serialNumber];
-        var lis = ul.find('li');
-        lis.remove('#' + device.device + device.serialNumber);
-    });
-}
-chrome.sockets.tcp.onReceive.addListener(function (msg) {
-    if (socketPool[msg.socketId]) {
-        ab2str(msg.data, function (e) {
-            if (socketPool.searchId && msg.socketId == socketPool.searchId) {
-                e = e.trim();
-                if (e != 'OKAY') {
-                    tmpRes = tmpRes + e;
-                }
-            } else if (socketPool.findDevice && msg.socketId == socketPool.findDevice) {
-                e = e.trim();
-                console.log(msg.socketId + ':::::' + e);
-                if (e != 'OKAY') {
-                    tmpDevices = tmpDevices + e;
-                }
-            }
-            console.log('每次的返回值:' + e);
-            if (e.startsWith('OKAY')) {
-                return null;
-            } else if (e.indexOf('Physical size:') != -1) {
-                var reg = /([0-9]+)x([0-9]+)/g;
-                var tmp = reg.exec(e);
-                devices[socketPool[msg.socketId]].SCsize = tmp[0];
-            } else if (e.indexOf('Publishing virtual display') != -1) {
-                client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].capPort + ";localabstract:minicap", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {});
-            } else if (e.indexOf('touch device') != -1) {
-                client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {});
-            }
+function dispatchResult(result) {
+    console.log('每次的返回值:' + result);
+    if (result.startsWith('OKAY')) {
+        return null;
+    } else if (result.indexOf('Physical size:') != -1) {
+        var reg = /([0-9]+)x([0-9]+)/g;
+        var tmp = reg.exec(result);
+        devices[socketPool[msg.socketId]].SCsize = tmp[0];
+    } else if (result.indexOf('Publishing virtual display') != -1) {
+        client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].capPort + ";localabstract:minicap", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {
+            socketPool.tcp5037 = socketId;
+        });
+    } else if (result.indexOf('touch device') != -1) {
+        client.sendCommands('host', "host-serial:" + devices[socketPool[msg.socketId]].serialNumber + ":forward:tcp:" + devices[socketPool[msg.socketId]].touchPort + ";localabstract:minitouch", devices[socketPool[msg.socketId]].serialNumber, (socketId) => {
+            socketPool.tcp5037 = socketId;
         });
     }
-});
+}
