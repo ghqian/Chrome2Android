@@ -82,18 +82,17 @@ function Tcp() {
     }.bind(this);
 
     this.sendCommands = function (type, cmd, serial, callback) {
-        //性能优化考虑
-        if (++counter % 10 == 0) {
-            this.getSockets((e) => {
-                e.forEach(function (value) {
-                    if (value.peerPort)
-                        chrome.sockets.tcp.close(value.socketId, function () {});
-                });
-            });
-        }
+        // //性能优化考虑
+        // if (++counter % 10 == 0) {
+        //     this.getSockets((e) => {
+        //         e.forEach(function (value) {
+        //             if (value.peerPort)
+        //                 chrome.sockets.tcp.close(value.socketId, function () {});
+        //         });
+        //     });
+        // }
         this.init(function () {
             this.connect(function () {
-                //exeCommands(cmd,serial,callback)
                 if (type == 'host') {
                     //服务端命令直接运行
                     this.send(str2ab(makeCommand(cmd)), function () {
