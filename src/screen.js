@@ -78,8 +78,7 @@ $(window).ready(function () {
 
 function findMinicap() {
     client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
-        console.log('findMinicap' + socketId);            
-        socketPool.tcp5037 = socketId;
+        console.log('findMinicap' + socketId);
         socketPool.findMinicap = socketId;
     });
     var callback = function (message) {
@@ -88,7 +87,6 @@ function findMinicap() {
                 console.log('返回值' + e);
                 if (e.startsWith('OKAY')) {
                     chrome.sockets.tcp.onReceive.removeListener(callback);
-                    return null;
                 } else if (e.indexOf('No such file') != -1) {
                     //弹出提示信息
                     var opt = {
@@ -140,6 +138,7 @@ function connectMinicap(device) {
         }
     });
 }
+
 /*
 chrome.sockets.tcp.onReceive.addListener(function (message) {
     if (message.socketId) {
@@ -323,19 +322,13 @@ function DrawImage(frameBody) {
 /*buttons*/
 //187多任务   3主页  4返回      26锁屏
 document.getElementById('mat_back').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {
-        socketPool.tcp5037 = socketId;        
-    });
+    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_home').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {
-        socketPool.tcp5037 = socketId;        
-    });
+    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_tasks').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {
-        socketPool.tcp5037 = socketId;        
-    });
+    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {});
 });
 
 /*监听拔调设备*/
