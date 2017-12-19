@@ -6,12 +6,34 @@ var ratioHeight = 1;
 var socketPool = {};
 var device;
 
+$(window).ready(function () {
+    device = JSON.parse(chrome.app.window.current().id);
+    var real = {
+        width: device.touchWidth,
+        height: device.touchHeight
+    };
+    ratio(real);
+    var localhost = '127.0.0.1';
+    findMinicap(device, () => {
+        connectTool(localhost, device.capPort, (socketId) => {
+            socketPool.minicap = socketId;
+        }, () => {
+            tryRead(message);
+        });
+        connectTool(localhost, device.touchPort, (socketId) => {
+            socketPool.minitouch = socketId;
+            $('#mat_canvas').on('mousedown', mouseDown.bind(null, socketId));
+            $('#mat_canvas').on('mouseup', mouseUp.bind(null, socketId));
+        }, () => { });
+    });
+});
+
 function ratio(real) {
     ratioWidth = real.width / $('#mat_canvas').width();
     ratioHeight = real.height / $('#mat_canvas').height();
 }
 
-function mouseupListener(socketId) {
+function mouseUp(socketId) {
     var str = ['u\n', 'c\n'];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
@@ -21,7 +43,7 @@ function mouseupListener(socketId) {
     $('#mat_canvas').off('mouseleave');
 }
 
-function mousedownListener(socketId) {
+function mouseDown(socketId) {
     if (event.button != 0) return;
     $('#mat_canvas').off('mousemove');
     $('#mat_canvas').off('mouseleave');
@@ -34,11 +56,11 @@ function mousedownListener(socketId) {
         var sTemp = str2ab(str[s], null, false);
         chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
     }
-    $('#mat_canvas').on('mousemove', mousemoveListener.bind(null, socketId));
-    $('#mat_canvas').on('mouseleave', mouseupListener.bind(null, socketId));
+    $('#mat_canvas').on('mousemove', mouseMove.bind(null, socketId));
+    $('#mat_canvas').on('mouseleave', mouseUp.bind(null, socketId));
 }
 
-function mousemoveListener(socketId) {
+function mouseMove(socketId) {
     var x = Math.ceil(event.offsetX * ratioWidth),
         y = Math.ceil(event.offsetY * ratioHeight);
     var str = ['m 0 ' + x + ' ' + y + ' 50\n',
@@ -49,19 +71,6 @@ function mousemoveListener(socketId) {
         chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
     }
 }
-
-$(window).ready(function () {
-    device = JSON.parse(chrome.app.window.current().id);
-    var real = {
-        width: device.touchWidth,
-        height: device.touchHeight
-    };
-    ratio(real);
-    findMinicap(device, function () {
-        connectMinicap(device);
-        connectMinitouch(device);
-    });
-});
 
 function findMinicap(device, callback) {
     execCommands('client', "shell:find /data/local/tmp/minicap", device.serialNumber, function (response) {
@@ -85,31 +94,16 @@ function findMinicap(device, callback) {
     });
 }
 
-function connectMinitouch(device) {
+function connectTool(address, port, onConnect, onReceive) {
     chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 1111 + device.device, function () {
-            socketPool.minitouch = createInfo.socketId;
-            $('#mat_canvas').on('mousedown', mousedownListener.bind(null, createInfo.socketId));
-            $('#mat_canvas').on('mouseup', mouseupListener.bind(null, createInfo.socketId));
+        chrome.sockets.tcp.connect(createInfo.socketId, address, port, () => {
+            onConnect(createInfo.socketId);
+            chrome.sockets.tcp.onReceive.addListener(function (message) {
+                if (message.socketId && socketPool.minitouch == createInfo.socketId) {
+                    onReceive(message);
+                }
+            });
         });
-    });
-    chrome.sockets.tcp.onReceive.addListener(function (message) {
-        if (message.socketId && socketPool.minitouch && (socketPool.minitouch == message.socketId)) {
-            //touchReceive(message.data);
-        }
-    });
-}
-
-function connectMinicap(device) {
-    chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, "127.0.0.1", 3131 + device.device, function (result) {
-            socketPool.minicap = createInfo.socketId;
-        });
-    });
-    chrome.sockets.tcp.onReceive.addListener(function (message) {
-        if (message.socketId && socketPool.minicap && (socketPool.minicap == message.socketId)) {
-            tryRead(message); //minicap receive callback
-        }
     });
 }
 

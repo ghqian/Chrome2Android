@@ -14,7 +14,7 @@ $(window).ready(function () {
         }, function (usbArr) {
             console.log(usbArr);
             if (usbArr.length > 0) {
-                adbDevice(usbArr[0]);
+                findDevice(usbArr[0]);
             }
         });
     });
@@ -68,15 +68,15 @@ function throwTip(tips, type) {
     $('.container').before(tmpl);
 }
 
-//发送 adb devices 查询设备状态是否可用
-function adbDevice(usb) {
+function findDevice(device) {
     execCommands('host', "host:devices", null, function (response) {
         var arr = response.split('\n');
         var opt;
         for (var i = 0; i < arr.length; i++) {
-            if (arr[i].indexOf(usb.serialNumber) != -1) {
+            if (arr[i].indexOf(device.serialNumber) != -1) {
                 if (arr[i].indexOf('device') != -1) {
-                    appendLi(usb);
+                    console.log('serialNumber ' + device.serialNumber);
+                    appendLi(device);
                 } else if (arr[i].indexOf('unauthorized') != -1) {
                     console.log('没授权');
                     opt = {
@@ -218,7 +218,9 @@ function showScreen(device) {
         device: device.device,
         serialNumber: device.serialNumber,
         touchWidth: device.touchWidth,
-        touchHeight: device.touchHeight
+        touchHeight: device.touchHeight,
+        capPort: device.capPort,
+        touchPort: device.touchPort
     };
     chrome.app.window.create('screen.html', {
         id: JSON.stringify(obj),
