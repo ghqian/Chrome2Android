@@ -1,115 +1,54 @@
 /*jshint esversion: 6 */
-function Tcp() {
-    
-    var counter = 0;
-    this.address = '127.0.0.1';
-    this.port = 5037;
-    this.option = {
+function sendCommands(type, cmd, serial, callback) {
+    var address = '127.0.0.1';
+    var port = 5037;
+    var option = {
         persistent: false,
         bufferSize: 8192
     };
-    this.socketId = 0;
-
-    this.create = function (callback) {
-        chrome.sockets.tcp.create(this.option, function (socketInfo) {
-            this.socketId = socketInfo.socketId;
-            callback(socketInfo);
-        }.bind(this));
-    }.bind(this);
-
-    this.update = function (caLlback) {
-        chrome.sockets.tcp.update(this.socketId, newSocketOption, callback);
-    }.bind(this);
-
-    this.pause = function (isPaused, callback) {
-        chrome.sockets.tcp.setPaused(this.socketId, isPaused, callback);
-    }.bind(this);
-
-    this.keepAlive = function (enable, delay, callback) {
-        chrome.sockets.tcp.setKeepAlive(this.socketId, enable, delay, function (code) {
-            if (code < 0) {
-                this.error(code);
-            } else {
-                callback();
+    chrome.sockets.tcp.create(option, function (socketInfo) {
+        chrome.sockets.tcp.connect(socketInfo.socketId, address, port, function (e) {
+            if (type == 'host') {
+                chrome.sockets.tcp.send(socketInfo.socketId, str2ab(makeCommand(cmd)), function () {
+                    callback(socketInfo.socketId);
+                });
+            } else if (type == 'client') {
+                var conDevice = 'host:transport:' + serial;
+                chrome.sockets.tcp.send(socketInfo.socketId, str2ab(makeCommand(conDevice)), function () {
+                    chrome.sockets.tcp.send(socketInfo.socketId, str2ab(makeCommand(cmd)), function () {
+                        console.log("cmd:" + type + " " + cmd + " " + socketInfo.socketId);
+                        callback(socketInfo.socketId);
+                    });
+                });
             }
-        }.bind(this));
-    }.bind(this);
+        });
+    });
+}
 
-    this.noDelay = function (noDelay, callback) {
-        chrome.sockets.tcp.setNoDelay(this.socketId, noDelay, function (code) {
-            if (code < 0) {
-                this.error(code);
-            } else {
-                callback();
-            }
-        }.bind(this));
-    }.bind(this);
-
-    this.disconnect = function (callback) {
-        chrome.sockets.tcp.disconnect(this.socketId, callback);
-    }.bind(this);
-
-    this.close = function (callback) {
-        chrome.sockets.tcp.close(this.socketId, callback);
-    }.bind(this);
-
-    this.error = function (code) {
-        console.log('An error occurred with code ' + code);
-    };
-
-    this.init = function (callback) {
-        this.create(callback);
-    }.bind(this);
-
-    this.connect = function (callback) {
-        chrome.sockets.tcp.connect(this.socketId, this.address, this.port, function (e) {
-            // this.pause(false,()=>{});
-            // this.noDelay(false,()=>{});
-            callback();
-        }.bind(this));
-    }.bind(this);
-
-    this.send = function (data, callback) {
-        chrome.sockets.tcp.send(this.socketId, data, callback);
-    }.bind(this);
-
-    this.getInfo = function (callback) {
-        chrome.sockets.tcp.getInfo(this.socketId, callback);
-    }.bind(this);
-
-    this.getSockets = function (callback) {
-        chrome.sockets.tcp.getSockets(callback);
-    }.bind(this);
-
-    this.sendCommands = function (type, cmd, serial, callback) {
-        // //性能优化考虑
-        // if (++counter % 10 == 0) {
-        //     this.getSockets((e) => {
-        //         e.forEach(function (value) {
-        //             if (value.peerPort)
-        //                 chrome.sockets.tcp.close(value.socketId, function () {});
-        //         });
-        //     });
-        // }
-        this.init(function () {
-            this.connect(function () {
-                if (type == 'host') {
-                    //服务端命令直接运行
-                    this.send(str2ab(makeCommand(cmd)), function () {
-                        callback(this.socketId);
-                    }.bind(this));
-                } else if (type == 'client') {
-                    //客户端命令，需要先链接客户端
-                    var conDevice = 'host:transport:' + serial;
-                    this.send(str2ab(makeCommand(conDevice)), function () {
-                        this.send(str2ab(makeCommand(cmd)), function () {
-                            callback(this.socketId);
-                        }.bind(this));
-                    }.bind(this));
+function execCommands(type, cmd, serial, callback) {
+    var searchId;
+    var result = '';
+    var cb = function (msg) {
+        if (searchId && msg.socketId == searchId) {
+            ab2str(msg.data, function (e) {
+                result += e.trim();
+                if (result.startsWith('OKAY')) {
+                    result = result.replace('OKAY', '');
                 }
-            }.bind(this));
-        }.bind(this));
-    }.bind(this);
+                console.log("result:" + type + " " + cmd + " " + searchId + " " + result);
+                if (result == '') {
+                    return;
+                }
+                if (callback(result)) {
+                    chrome.sockets.tcp.onReceive.removeListener(cb);
+                }
+            });
+        }
+    };
+    chrome.sockets.tcp.onReceive.addListener(cb);
+    sendCommands(type, cmd, serial, (socketId) => {
+        searchId = socketId;
+    });
 }
 
 function str2ab(oldStr, newAB, end) {
@@ -123,7 +62,7 @@ function str2ab(oldStr, newAB, end) {
     var i = new Uint8Array(newAB);
     if (end) i[oldStr.length] = 0;
     for (var r = 0,
-            s = oldStr.length; r < s; r++) {
+        s = oldStr.length; r < s; r++) {
         i[r] = oldStr.charCodeAt(r);
     }
     return newAB;

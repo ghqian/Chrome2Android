@@ -1,26 +1,21 @@
 /*jshint esversion: 6 */
 
-var real = {
-    width: 1080,
-    height: 1920
-};
 var ratioWidth = 1;
 var ratioHeight = 1;
-var canvas = $('#mat_canvas');
+
 var socketPool = {};
-var client, currentDevice;
+var device;
 
 function ratio(real) {
-    ratioWidth = real.width / canvas.width();
-    ratioHeight = real.height / canvas.height();
+    ratioWidth = real.width / $('#mat_canvas').width();
+    ratioHeight = real.height / $('#mat_canvas').height();
 }
-ratio(real);
 
 function mouseupListener(socketId) {
     var str = ['u\n', 'c\n'];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) {});
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
     }
     $('#mat_canvas').off('mousemove');
     $('#mat_canvas').off('mouseleave');
@@ -37,7 +32,7 @@ function mousedownListener(socketId) {
     ];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) {});
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
     }
     $('#mat_canvas').on('mousemove', mousemoveListener.bind(null, socketId));
     $('#mat_canvas').on('mouseleave', mouseupListener.bind(null, socketId));
@@ -51,67 +46,48 @@ function mousemoveListener(socketId) {
     ];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) {
-
-        });
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
     }
 }
 
 $(window).ready(function () {
-    chrome.app.window.current().onClosed.addListener(function () {
-        var callback = () => {
-            if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
-        };
-        for (var id in socketPool) {
-            console.log('close socket:', socketPool[id]);
-            chrome.sockets.tcp.close(socketPool[id], callback);
-        }
-        socketPool = {};
+    device = JSON.parse(chrome.app.window.current().id);
+    var real = {
+        width: device.touchWidth,
+        height: device.touchHeight
+    };
+    ratio(real);
+    findMinicap(device, function () {
+        connectMinicap(device);
+        connectMinitouch(device);
     });
-    client = new Tcp();
-    currentDevice = JSON.parse(chrome.app.window.current().id);
-    var device = currentDevice.device;
-    findMinicap(device);
-    connectMinicap(device);
-    connectMinitouch(device);
 });
 
-function findMinicap() {
-    client.sendCommands('client', "shell:find /data/local/tmp/minicap", currentDevice.serialNumber, (socketId) => {
-        console.log('findMinicap' + socketId);
-        socketPool.findMinicap = socketId;
-    });
-    var callback = function (message) {
-        if (message.socketId && message.socketId == socketPool.findMinicap) {
-            ab2str(message.data, function (e) {
-                console.log('返回值' + e);
-                if (e.startsWith('OKAY')) {
-                    chrome.sockets.tcp.onReceive.removeListener(callback);
-                } else if (e.indexOf('No such file') != -1) {
-                    //弹出提示信息
-                    var opt = {
-                        type: "basic",
-                        iconUrl: '/assets/ss_icon11.png',
-                        title: '设备异常',
-                        message: "无法正常启动设备，请尝试重新连接设备或重新打开应用...",
-                    };
-                    chrome.notifications.create(opt, () => {});
-                    //加哭脸
-                    var div = document.createElement('div');
-                    $(div).attr('id', 'mat_error');
-                    $('body').append(div);
-                }
-            });
+function findMinicap(device, callback) {
+    execCommands('client', "shell:find /data/local/tmp/minicap", device.serialNumber, function (response) {
+        if (response.indexOf('No such file') != -1) {
+            //弹出提示信息
+            var opt = {
+                type: "basic",
+                iconUrl: '/assets/ss_icon11.png',
+                title: '设备异常',
+                message: "无法正常启动设备，请尝试重新连接设备或重新打开应用...",
+            };
+            chrome.notifications.create(opt, () => { });
+            //加哭脸
+            var div = document.createElement('div');
+            $(div).attr('id', 'mat_error');
+            $('body').append(div);
+        } else {
+            callback();
         }
-    };
-    chrome.sockets.tcp.onReceive.addListener(callback);
+        return true;
+    });
 }
 
 function connectMinitouch(device) {
-    if (socketPool.minitouch)
-        return;
     chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 1111 + device, function () {
+        chrome.sockets.tcp.connect(createInfo.socketId, '127.0.0.1', 1111 + device.device, function () {
             socketPool.minitouch = createInfo.socketId;
             $('#mat_canvas').on('mousedown', mousedownListener.bind(null, createInfo.socketId));
             $('#mat_canvas').on('mouseup', mouseupListener.bind(null, createInfo.socketId));
@@ -125,10 +101,8 @@ function connectMinitouch(device) {
 }
 
 function connectMinicap(device) {
-    if (socketPool.minicap)
-        return;
     chrome.sockets.tcp.create(function (createInfo) {
-        chrome.sockets.tcp.connect(createInfo.socketId, "127.0.0.1", 3131 + device, function (result) {
+        chrome.sockets.tcp.connect(createInfo.socketId, "127.0.0.1", 3131 + device.device, function (result) {
             socketPool.minicap = createInfo.socketId;
         });
     });
@@ -322,19 +296,19 @@ function DrawImage(frameBody) {
 /*buttons*/
 //187多任务   3主页  4返回      26锁屏
 document.getElementById('mat_back').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 4", currentDevice.serialNumber, (socketId) => {});
+    sendCommands('client', "shell:input keyevent 4", device.serialNumber, (socketId) => { });
 });
 document.getElementById('mat_home').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 3", currentDevice.serialNumber, (socketId) => {});
+    sendCommands('client', "shell:input keyevent 3", device.serialNumber, (socketId) => { });
 });
 document.getElementById('mat_tasks').addEventListener('click', function () {
-    client.sendCommands('client', "shell:input keyevent 187", currentDevice.serialNumber, (socketId) => {});
+    sendCommands('client', "shell:input keyevent 187", device.serialNumber, (socketId) => { });
 });
 
 /*监听拔调设备*/
 if (chrome.usb.onDeviceRemoved) {
-    chrome.usb.onDeviceRemoved.addListener(function (device) {
-        if ((device.serialNumber + device.device) == (currentDevice.serialNumber + currentDevice.device)) {
+    chrome.usb.onDeviceRemoved.addListener(function (removed) {
+        if ((removed.serialNumber + removed.device) == (device.serialNumber + device.device)) {
             chrome.app.window.current().close();
         }
     });

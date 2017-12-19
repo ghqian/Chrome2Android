@@ -33,7 +33,7 @@ $('#mat_chooseFile').click(function () {
 });
 
 function pushFileCommands(e, serial, filePath) {
-    console.log('推文件啦：' + filePath);
+    console.log('push:' + filePath);
     var fileName = filePath.replace(/^.*[\\\/]/, '');
     var cmd1 = 'host:transport:' + serial;
     var cmd2 = 'sync:';
