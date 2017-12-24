@@ -6,8 +6,9 @@ var ratioHeight = 1;
 var socketPool = {};
 var device;
 
-$(window).ready(function () {
-    device = JSON.parse(chrome.app.window.current().id);
+window.onload = function () {
+
+    // device = JSON.parse(chrome.app.window.current().id);
     var real = {
         width: device.touchWidth,
         height: device.touchHeight
@@ -17,16 +18,22 @@ $(window).ready(function () {
     findMinicap(device, () => {
         connectTool(localhost, device.capPort, (socketId) => {
             socketPool.minicap = socketId;
-        }, () => {
-            tryRead(message);
-        });
+        }, tryRead);
         connectTool(localhost, device.touchPort, (socketId) => {
             socketPool.minitouch = socketId;
             $('#mat_canvas').on('mousedown', mouseDown.bind(null, socketId));
             $('#mat_canvas').on('mouseup', mouseUp.bind(null, socketId));
-        }, () => { });
+        }, (message) => {});
     });
-});
+
+    if (chrome.usb.onDeviceRemoved) {
+        chrome.usb.onDeviceRemoved.addListener(function (removed) {
+            if ((removed.serialNumber + removed.device) == (device.serialNumber + device.device)) {
+                chrome.app.window.current().close();
+            }
+        });
+    }
+};
 
 function ratio(real) {
     ratioWidth = real.width / $('#mat_canvas').width();
@@ -37,7 +44,7 @@ function mouseUp(socketId) {
     var str = ['u\n', 'c\n'];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) {});
     }
     $('#mat_canvas').off('mousemove');
     $('#mat_canvas').off('mouseleave');
@@ -54,7 +61,7 @@ function mouseDown(socketId) {
     ];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) {});
     }
     $('#mat_canvas').on('mousemove', mouseMove.bind(null, socketId));
     $('#mat_canvas').on('mouseleave', mouseUp.bind(null, socketId));
@@ -68,7 +75,7 @@ function mouseMove(socketId) {
     ];
     for (var s in str) {
         var sTemp = str2ab(str[s], null, false);
-        chrome.sockets.tcp.send(socketId, sTemp, function (n) { });
+        chrome.sockets.tcp.send(socketId, sTemp, function (n) {});
     }
 }
 
@@ -82,7 +89,7 @@ function findMinicap(device, callback) {
                 title: '设备异常',
                 message: "无法正常启动设备，请尝试重新连接设备或重新打开应用...",
             };
-            chrome.notifications.create(opt, () => { });
+            chrome.notifications.create(opt, () => {});
             //加哭脸
             var div = document.createElement('div');
             $(div).attr('id', 'mat_error');
@@ -99,7 +106,7 @@ function connectTool(address, port, onConnect, onReceive) {
         chrome.sockets.tcp.connect(createInfo.socketId, address, port, () => {
             onConnect(createInfo.socketId);
             chrome.sockets.tcp.onReceive.addListener(function (message) {
-                if (message.socketId && socketPool.minitouch == createInfo.socketId) {
+                if (message.socketId && message.socketId == createInfo.socketId) {
                     onReceive(message);
                 }
             });
@@ -290,20 +297,11 @@ function DrawImage(frameBody) {
 /*buttons*/
 //187多任务   3主页  4返回      26锁屏
 document.getElementById('mat_back').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 4", device.serialNumber, (socketId) => { });
+    sendCommands('client', "shell:input keyevent 4", device.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_home').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 3", device.serialNumber, (socketId) => { });
+    sendCommands('client', "shell:input keyevent 3", device.serialNumber, (socketId) => {});
 });
 document.getElementById('mat_tasks').addEventListener('click', function () {
-    sendCommands('client', "shell:input keyevent 187", device.serialNumber, (socketId) => { });
+    sendCommands('client', "shell:input keyevent 187", device.serialNumber, (socketId) => {});
 });
-
-/*监听拔调设备*/
-if (chrome.usb.onDeviceRemoved) {
-    chrome.usb.onDeviceRemoved.addListener(function (removed) {
-        if ((removed.serialNumber + removed.device) == (device.serialNumber + device.device)) {
-            chrome.app.window.current().close();
-        }
-    });
-}

@@ -31,14 +31,18 @@ function execCommands(type, cmd, serial, callback) {
     var cb = function (msg) {
         if (searchId && msg.socketId == searchId) {
             ab2str(msg.data, function (e) {
-                result += e.trim();
+                var tmp = e.trim();
+                if (tmp == '') {
+                    return;
+                }
+                result += tmp;
                 if (result.startsWith('OKAY')) {
                     result = result.replace('OKAY', '');
                 }
-                console.log("result:" + type + " " + cmd + " " + searchId + " " + result);
                 if (result == '') {
                     return;
                 }
+                console.log("result:" + type + " " + cmd + " " + searchId + " " + result);
                 if (callback(result)) {
                     chrome.sockets.tcp.onReceive.removeListener(cb);
                 }

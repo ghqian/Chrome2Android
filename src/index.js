@@ -68,15 +68,15 @@ function throwTip(tips, type) {
     $('.container').before(tmpl);
 }
 
-function findDevice(device) {
+function findDevice(usb) {
     execCommands('host', "host:devices", null, function (response) {
         var arr = response.split('\n');
         var opt;
         for (var i = 0; i < arr.length; i++) {
-            if (arr[i].indexOf(device.serialNumber) != -1) {
+            if (arr[i].indexOf(usb.serialNumber) != -1) {
                 if (arr[i].indexOf('device') != -1) {
-                    console.log('serialNumber ' + device.serialNumber);
-                    appendLi(device);
+                    console.log('serialNumber ' + usb.serialNumber);
+                    appendLi(usb);
                 } else if (arr[i].indexOf('unauthorized') != -1) {
                     console.log('没授权');
                     opt = {
@@ -85,7 +85,7 @@ function findDevice(device) {
                         title: '请允许手机调试',
                         message: "请点击允许USB调试,再尝试点击find devices...",
                     };
-                    chrome.notifications.create(opt, () => { });
+                    chrome.notifications.create(opt, () => {});
                 } else if (arr[i].indexOf('offline') != -1) {
                     console.log('状态离线');
                     opt = {
@@ -94,7 +94,7 @@ function findDevice(device) {
                         title: '手机状态不可用',
                         message: "adb检查手机状态为offline, 请检查是否已经允许USB调试或重启手机",
                     };
-                    chrome.notifications.create(opt, () => { });
+                    chrome.notifications.create(opt, () => {});
                 }
                 return true;
             }
@@ -106,12 +106,17 @@ function findDevice(device) {
             title: '手机不可用',
             message: "adb无法正常连接手机，请检查驱动是否安装成功",
         };
-        chrome.notifications.create(opt, () => { });
+        chrome.notifications.create(opt, () => {});
         return false;
     });
 }
 
-function appendLi(device) {
+function appendLi(usb) {
+    var device = {
+        device: usb.device,
+        serialNumber: usb.serialNumber,
+        productName: usb.productName
+    };
     var deviceId = device.device + device.serialNumber;
     var exist = deviceId in devicePool;
     var fragment;
@@ -165,10 +170,10 @@ function createDeviceLi(device, fragment) {
 
     $(btn).click(function (e) {
         bridgeMinicap(device, function () {
-            bridgeMinitouch(device, function (tsWidth, tsHeight) {
-                console.log("tsWidth " + tsWidth + " tsHeight " + tsHeight);
-                device.touchWidth = tsWidth;
-                device.touchHeight = tsHeight;
+            bridgeMinitouch(device, function (w, h) {
+                console.log("tsWidth " + w + " tsHeight " + h);
+                device.touchWidth = w;
+                device.touchHeight = h;
                 showScreen(device);
             });
         });
@@ -178,14 +183,14 @@ function createDeviceLi(device, fragment) {
 
 function bridgeMinicap(device, callback) {
     execCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, function (response) {
-        if (response.indexOf('Publishing virtual display') != -1) {
-            var deviceId = device.device + device.serialNumber;
-            sendCommands('host', "host-serial:" + device.serialNumber +
+        if (response.indexOf('Publishing virtual displayINFO') != -1) {
+            execCommands('host', "host-serial:" + device.serialNumber +
                 ":forward:tcp:" + device.capPort +
                 ";localabstract:minicap", device.serialNumber,
                 (socketId) => {
-                    callback();
+                    return true;
                 });
+            callback();
             return true;
         }
         return false;
@@ -194,36 +199,35 @@ function bridgeMinicap(device, callback) {
 
 function bridgeMinitouch(device, callback) {
     execCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, function (response) {
+        if (response.indexOf('Unable to start server on minitouch') != -1) {
+            return true;
+        }
+        if (response.indexOf('binding socket') != -1) {
+            return true;
+        }
         if (response.indexOf('touch device') != -1) {
             var deviceId = device.device + device.serialNumber;
             // Type B touch device sec_touchscreen (4095x4095 with 10 contacts) detected on /dev/input/event0 (score 2109)
             var reg = /([0-9]+)x([0-9]+)/g;
             var tmp = reg.exec(response);
-            sendCommands('host', "host-serial:" + device.serialNumber +
+            execCommands('host', "host-serial:" + device.serialNumber +
                 ":forward:tcp:" + device.touchPort +
                 ";localabstract:minitouch", device.serialNumber,
                 (socketId) => {
-                    callback(tmp[1], tmp[2]);
+                    return true;
                 });
+            callback(tmp[1], tmp[2]);
             return true;
         }
         return false;
     });
 }
 
-function showScreen(device) {
+function showScreen(device, socketId) {
     var screenWidth = 371;
     var screenHeight = 710;
-    var obj = {
-        device: device.device,
-        serialNumber: device.serialNumber,
-        touchWidth: device.touchWidth,
-        touchHeight: device.touchHeight,
-        capPort: device.capPort,
-        touchPort: device.touchPort
-    };
+
     chrome.app.window.create('screen.html', {
-        id: JSON.stringify(obj),
         width: screenWidth,
         height: screenHeight,
         maxWidth: screenWidth,
@@ -231,19 +235,22 @@ function showScreen(device) {
         minWidth: screenWidth,
         minHeight: screenHeight,
     }, function (screenWin) {
-        screenWin.onClosed.addListener(callback = function () {
-            var socketPool = screenWin.contentWindow.socketPool;
-            var callback = () => {
-                if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
-            };
-            for (var id in socketPool) {
-                console.log('close socket:', socketPool[id]);
-                chrome.sockets.tcp.close(socketPool[id], callback);
-            }
-            screenWin.onClosed.removeListener(callback);
-        });
-    });
+        if (screenWin) {
 
+            screenWin.contentWindow.device = device;
+            screenWin.onClosed.addListener(callback = function () {
+                var socketPool = screenWin.contentWindow.socketPool;
+                var callback = () => {
+                    if (chrome.runtime.lastError) console.log(chrome.runtime.lastError);
+                };
+                for (var id in socketPool) {
+                    console.log('close socket:', socketPool[id]);
+                    chrome.sockets.tcp.close(socketPool[id], callback);
+                }
+                screenWin.onClosed.removeListener(callback);
+            });
+        }
+    });
 }
 
 function findAbi(device, callback) {
