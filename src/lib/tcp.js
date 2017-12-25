@@ -43,7 +43,7 @@ function execCommands(type, cmd, serial, callback) {
                     return;
                 }
                 console.log("result:" + type + " " + cmd + " " + searchId + " " + result);
-                if (callback(result)) {
+                if (callback(result, msg.socketId)) {
                     chrome.sockets.tcp.onReceive.removeListener(cb);
                 }
             });

@@ -85,7 +85,7 @@ function findDevice(usb) {
                         title: '请允许手机调试',
                         message: "请点击允许USB调试,再尝试点击find devices...",
                     };
-                    chrome.notifications.create(opt, () => {});
+                    chrome.notifications.create(opt, () => { });
                 } else if (arr[i].indexOf('offline') != -1) {
                     console.log('状态离线');
                     opt = {
@@ -94,7 +94,7 @@ function findDevice(usb) {
                         title: '手机状态不可用',
                         message: "adb检查手机状态为offline, 请检查是否已经允许USB调试或重启手机",
                     };
-                    chrome.notifications.create(opt, () => {});
+                    chrome.notifications.create(opt, () => { });
                 }
                 return true;
             }
@@ -106,7 +106,7 @@ function findDevice(usb) {
             title: '手机不可用',
             message: "adb无法正常连接手机，请检查驱动是否安装成功",
         };
-        chrome.notifications.create(opt, () => {});
+        chrome.notifications.create(opt, () => { });
         return false;
     });
 }
@@ -117,6 +117,7 @@ function appendLi(usb) {
         serialNumber: usb.serialNumber,
         productName: usb.productName
     };
+    device.socketPool = {};
     var deviceId = device.device + device.serialNumber;
     var exist = deviceId in devicePool;
     var fragment;
@@ -169,25 +170,31 @@ function createDeviceLi(device, fragment) {
     fragment.appendChild(li);
 
     $(btn).click(function (e) {
-        bridgeMinicap(device, function () {
-            bridgeMinitouch(device, function (w, h) {
-                console.log("tsWidth " + w + " tsHeight " + h);
-                device.touchWidth = w;
-                device.touchHeight = h;
-                showScreen(device);
+        if (device.socketPool.minicap) {
+            showScreen(device);
+        } else {
+            bridgeMinicap(device, function () {
+                bridgeMinitouch(device, function (w, h) {
+                    console.log("tsWidth " + w + " tsHeight " + h);
+                    device.touchWidth = w;
+                    device.touchHeight = h;
+                    showScreen(device);
+                });
             });
-        });
+        }
         $(e).parents('li').css('backgroundColor', '#ccc').siblings('li').css('backgroundColor', 'none');
     });
 }
 
 function bridgeMinicap(device, callback) {
-    execCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, function (response) {
-        if (response.indexOf('Publishing virtual displayINFO') != -1) {
+    execCommands('client', "shell:LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -P " + device.SCsize + "@360x768/0", device.serialNumber, function (response, socketId) {
+        if (response.indexOf('bytes for JPG encoder') != -1) {
+            device.socketPool.minicap = socketId;
             execCommands('host', "host-serial:" + device.serialNumber +
                 ":forward:tcp:" + device.capPort +
                 ";localabstract:minicap", device.serialNumber,
-                (socketId) => {
+                (response, socketId) => {
+                    device.socketPool.minicapBridge = socketId;
                     return true;
                 });
             callback();
@@ -198,7 +205,7 @@ function bridgeMinicap(device, callback) {
 }
 
 function bridgeMinitouch(device, callback) {
-    execCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, function (response) {
+    execCommands('client', "shell:/data/local/tmp/minitouch", device.serialNumber, function (response, socketId) {
         if (response.indexOf('Unable to start server on minitouch') != -1) {
             return true;
         }
@@ -206,6 +213,7 @@ function bridgeMinitouch(device, callback) {
             return true;
         }
         if (response.indexOf('touch device') != -1) {
+            device.socketPool.minitouch = socketId;
             var deviceId = device.device + device.serialNumber;
             // Type B touch device sec_touchscreen (4095x4095 with 10 contacts) detected on /dev/input/event0 (score 2109)
             var reg = /([0-9]+)x([0-9]+)/g;
@@ -213,7 +221,8 @@ function bridgeMinitouch(device, callback) {
             execCommands('host', "host-serial:" + device.serialNumber +
                 ":forward:tcp:" + device.touchPort +
                 ";localabstract:minitouch", device.serialNumber,
-                (socketId) => {
+                (response, socketId) => {
+                    device.socketPool.minitouchBridge = socketId;
                     return true;
                 });
             callback(tmp[1], tmp[2]);
@@ -253,8 +262,8 @@ function showScreen(device, socketId) {
     });
 }
 
-function findAbi(device, callback) {
-    execCommands('client', "shell:getprop ro.product.cpu.abi | tr -d '\r'", device.serialNumber, function (response) {
+function findAbi(device, callback) {// | tr -d '\r'
+    execCommands('client', "shell:getprop ro.product.cpu.abi", device.serialNumber, function (response) {
         if (response.startsWith('arm') || response.startsWith('x86')) {
             var regRN = /\r\n/g;
             var abi = response.replace(regRN, "");
@@ -266,7 +275,7 @@ function findAbi(device, callback) {
 }
 
 function findSdkVer(device, callback) {
-    execCommands('client', "shell:getprop ro.build.version.sdk | tr -d '\r'", device.serialNumber, function (response) {
+    execCommands('client', "shell:getprop ro.build.version.sdk", device.serialNumber, function (response) {
         if (!isNaN(response) && response.length > 1) {
             var regRN = /\r\n/g;
             var sdkVer = response.replace(regRN, "");
@@ -286,6 +295,8 @@ function findSize(device, callback) {
                 callback(tmp[0], tmp[1], tmp[2]);
                 return true;
             }
+        } else if (response.indexOf('wm: not found') != -1) {
+            callback('1080x1920', '10800', '1920');
         }
         return false;
     });
